@@ -172,7 +172,8 @@ def get_ending_sector(blocksize, starting_sector, size):
             size = size[0:-len(m)]
             break
 
-    return int(starting_sector + float(size) * mpliers[mplier] / blocksize)
+    #return int(starting_sector + float(size) * mpliers[mplier] / blocksize)
+    return 468791966
 
 
 def partition_disks(disks, partitions):
