@@ -11,9 +11,7 @@
             "boot_command": [
                 "<enter><wait>",
                 "<leftShift>O",
-                " ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/vmware-esxi-debug-ks.cfg",
-                " com1_Port=0x3f8 tty2Port=com1",
-                "<enter>"
+                " ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/vmware-esxi-debug-ks.cfg<enter>"
             ],
             "boot_wait": "3s",
             "disk_interface": "ide",
@@ -22,13 +20,13 @@
             "memory": 4096,
             "http_directory": "http",
             "format": "raw",
-            "net_device": "e1000",
+            "net_bridge": "virbr0",
+            "net_device": "vmxnet3",
             "qemuargs": [
                 [ "-cpu", "host" ],
-                [ "-smp", "2,sockets=2,cores=1,threads=1" ],
-                [ "-serial", "stdio" ]
+                [ "-smp", "2,sockets=2,cores=1,threads=1" ]
             ],
-            "shutdown_timeout": "1h"
+            "shutdown_timeout": "20m"
         }
     ],
     "post-processors": [
@@ -36,19 +34,26 @@
             "type": "shell-local",
             "inline_shebang": "/bin/bash -e",
             "inline": [
-                "echo 'Syncing output-qemu/packer-qemu...'",
                 "sync -f output-qemu/packer-qemu",
-                "IMG_FMT=raw",
-                "source ../scripts/setup-nbd",
                 "TMP_DIR=$(mktemp -d /tmp/packer-maas-XXXX)",
-                "echo 'Adding curtin-hooks to image...'",
-                "mount ${nbd}p1 $TMP_DIR",
+                "echo 'Mounting image...'",
+                "modprobe nbd",
+                "qemu-nbd -d /dev/nbd4",
+                "qemu-nbd -c /dev/nbd4 -f raw -n output-qemu/packer-qemu",
+                "echo 'Waiting for partitions to be created...'",
+                "tries=0",
+                "while [ ! -e /dev/nbd4p1 -a $tries -lt 60 ]; do",
+                "    sleep 1",
+                "    tries=$((tries+1))",
+                "done",
+                "mount /dev/nbd4p1 $TMP_DIR",
                 "mkdir -p $TMP_DIR/curtin",
+                "echo 'Adding curtin-hooks to image...'",
                 "cp curtin-hooks $TMP_DIR/curtin",
                 "sync -f $TMP_DIR/curtin",
                 "umount $TMP_DIR",
                 "echo 'Adding post-install scripts to image...'",
-                "mount ${nbd}p6 $TMP_DIR",
+                "mount /dev/nbd4p6 $TMP_DIR",
                 "mkdir -p $TMP_DIR/maas",
                 "cp -r pyyaml/lib3/yaml $TMP_DIR/maas",
                 "cp -r oauthlib/oauthlib $TMP_DIR/maas",
@@ -63,10 +68,9 @@
                 "cp storage-esxi $TMP_DIR/maas",
                 "cp vendor-data-esxi $TMP_DIR/maas",
                 "cp vcenter $TMP_DIR/maas",
-                "echo 'Unmounting image...'",
                 "sync -f $TMP_DIR/maas",
                 "umount $TMP_DIR",
-                "qemu-nbd -d $nbd",
+                "qemu-nbd -d /dev/nbd4",
                 "rmdir $TMP_DIR"
             ]
         },
